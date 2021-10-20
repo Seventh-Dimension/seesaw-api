@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:kafka="http://www.mulesoft.org/schema/mule/kafka" xmlns:logger="http://www.mulesoft.org/schema/mule/logger"
+	xmlns:ecolab-el-connector="http://www.mulesoft.org/schema/mule/ecolab-el-connector"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/ecolab-el-connector http://www.mulesoft.org/schema/mule/ecolab-el-connector/current/mule-ecolab-el-connector.xsd
+http://www.mulesoft.org/schema/mule/logger http://www.mulesoft.org/schema/mule/logger/current/mule-logger.xsd
+http://www.mulesoft.org/schema/mule/kafka http://www.mulesoft.org/schema/mule/kafka/current/mule-kafka.xsd">
+	<sub-flow name="order-simulation-callback-impl-subflow" doc:id="ef5253e2-00b1-4319-a258-f2b7ff594819" >
+		<flow-ref doc:name="Flow Reference to order-simulation-impl-connect-getToken-subflow" doc:id="8d45a960-b5ec-45b4-b836-5e7bec9eb995" name="order-simulation-impl-connect-get-access-token-subflow" target="access_token" targetValue="#['Bearer ' ++ payload.access_token]"/>
+		<ecolab-el-connector:custom-log doc:name="Custom Log  at connect request" doc:id="a49d1273-37b4-4dd6-b200-d8d0607f1d2e" category="ecolab.sales.order.simulation.callback.connect.request" sendToStarage="false">
+			<ecolab-el-connector:payload><![CDATA[#["Calling the connect with callback URL"]]]></ecolab-el-connector:payload>
+		</ecolab-el-connector:custom-log>
+		<flow-ref doc:name="Flow Reference to order-simulation-impl-connect-subflow" doc:id="9ecac726-2031-4f59-8b62-028eeca67800" name="order-simulation-impl-connect-subflow"/>
+		<ecolab-el-connector:custom-log doc:name="Custom Log  at connect response" doc:id="a4fb28c4-794c-4ddc-a1c2-e84ddc9c73df" category="ecolab.sales.order.simulation.callback.connect.response" sendToStarage="false"/>
+		<ee:transform doc:name="Publish Validation" doc:id="1a88f81d-c9db-4a7f-9920-64edf085c4c4" >
+			<ee:message >
+				<ee:set-payload resource="dwl/salesorder/response/order-simulation-callback-response.dwl" />
+			</ee:message>
+			<ee:variables >
+			</ee:variables>
+		</ee:transform>
+	</sub-flow>
+	<sub-flow name="order-simulation-impl-connect-get-access-token-subflow" doc:id="485cd7d7-86f2-4546-94ee-2be711e1a014">
+			<ee:transform doc:name="Set cache key" doc:id="3fcc483f-c3ad-4890-899c-e47f2b131198" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="inputCacheKey" ><![CDATA[%dw 2.0
+output application/java
+import * from dwl::salesorder::request::connectAuthHeaderFunc
+---
+connectAuthHeader().username]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<ee:cache doc:name="Cache" doc:id="61345126-97b6-45d9-bf58-6f444ef38e95" cachingStrategy-ref="OAuth_Token_Cache">
+			<ecolab-el-connector:custom-log doc:name="Custom Log at get token request" doc:id="4c3dbb31-9bd7-4a33-abf4-ac679ac0903a" category="ecolab.sales.order.simulation.callback.getToken.request" sendToStarage="false">
+			<ecolab-el-connector:payload><![CDATA[#["Token expired or not present in the cache.So getting the token from Connect"]]]></ecolab-el-connector:payload>
+		</ecolab-el-connector:custom-log>
+			<http:request method="POST" doc:name="Request to connect- get token" doc:id="16279cc9-48a6-4c1b-9c1b-f629139bf754" responseTimeout="#[Mule::p('secure::ordersimulation.connect.timeout')]" url="#[Mule::p('secure::ordersimulation.connect.sfdctokenUrl')]" config-ref="HTTP_Request_configuration">
+			<http:body><![CDATA[#[output application/x-www-form-urlencoded
+import * from dwl::salesorder::request::connectAuthHeaderFunc
+---
+connectAuthHeader()]]]></http:body>
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"Host" : Mule::p('secure::ordersimulation.connect.token.host')
+}]]]></http:headers>
+		</http:request>
+			<ecolab-el-connector:custom-log doc:name="Custom Log  at get token response" doc:id="6bdecd27-f707-40be-9a0d-c133dfd26871" category="ecolab.sales.order.simulation.callback.connect.getToken.response" sendToStarage="false">
+			<ecolab-el-connector:payload><![CDATA[#["Token received from Connect"]]]></ecolab-el-connector:payload>
+		</ecolab-el-connector:custom-log>
+		</ee:cache>
+	</sub-flow>
+	<sub-flow name="order-simulation-impl-connect-subflow" doc:id="868ae78a-eb83-4ff2-b34e-dac4367b8955">
+		<until-successful maxRetries="#[Mule::p('secure::ordersimulation.connect.maxretries')]" doc:name="Until Successful" doc:id="2f92c17d-b87e-4fe5-82dd-b0168a3ae988" millisBetweenRetries="#[Mule::p('secure::ordersimulation.connect.retryinterval')]">
+			<http:request method="POST" doc:name="Request to connect with callback URL" doc:id="b45da783-256f-4dec-905f-8b945a81fe0e" url="#[vars.callbackUrl]" responseTimeout="#[Mule::p('secure::ordersimulation.connect.timeout')]" config-ref="HTTP_Request_configuration">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"Authorization" : vars.'access_token',
+	"Host" : Mule::p('secure::ordersimulation.connect.callback.host')
+}]]]></http:headers>
+		</http:request>
+		</until-successful>
+	</sub-flow>
+</mule>

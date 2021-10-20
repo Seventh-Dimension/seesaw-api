@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:kafka="http://www.mulesoft.org/schema/mule/kafka" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:azure-service-bus-messaging="http://www.mulesoft.org/schema/mule/azure-service-bus-messaging"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/azure-service-bus-messaging http://www.mulesoft.org/schema/mule/azure-service-bus-messaging/current/mule-azure-service-bus-messaging.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/kafka http://www.mulesoft.org/schema/mule/kafka/current/mule-kafka.xsd">
+	<azure-service-bus-messaging:config name="Azure_Service_Bus_Messaging_Connector_Config" doc:name="Azure Service Bus Messaging Connector Config" doc:id="1e7b12fd-e46f-4d72-8170-b044beeeb6ff" >
+		<azure-service-bus-messaging:sas-connection namespace="Ecolab-EIA-EventHubs-X" sharedAccessKeyName="eia-api-order-simulation-consumer-x" sharedAccessKey="T1KXMczaAdlDNGMkM15aE2+xACmy9x8UHrh1dFwNEV8=" />
+	</azure-service-bus-messaging:config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="308b7e5c-f32b-43d0-9631-fa5a09d9ea4c" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<flow name="tpFlow" doc:id="fd82ff27-9af0-465b-891a-41da90919879" >
+		<http:listener doc:name="Listener" doc:id="81115c90-3e58-45d2-b274-16b315a7ee00" config-ref="HTTP_Listener_config" path="/asb"/>
+		<logger level="INFO" doc:name="Logger" doc:id="f62f0f56-1349-4f92-ad26-83708dff2688" message=":::::::::::: SENDING #[payload.Id]" category="publish.before"/>
+		<ee:transform doc:name="Transform Message" doc:id="54ccf183-97c8-43e5-af13-68a30213c3bf" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+attributes.]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<azure-service-bus-messaging:send doc:name="Send" doc:id="512d2c88-767d-43e6-987d-4f27201af3ea" config-ref="Azure_Service_Bus_Messaging_Connector_Config" destinationName="eia-api-order-simulation-x"/>
+		<logger level="INFO" doc:name="Logger" doc:id="9ce7ad77-1881-41e8-873b-2a63a716c56d" message=":::::::::::: SENT TO EH #[payload.Id]" category="publish.done"/>
+	</flow>
+	<flow name="tpFlow1" doc:id="d725511d-05c2-45a0-88c5-2ddec5a706f8" >
+		<azure-service-bus-messaging:message-listener doc:name="Message listener" doc:id="e3c2121d-bd96-4f4c-8799-528b80cb7705" config-ref="Azure_Service_Bus_Messaging_Connector_Config" ackMode="IMMEDIATE" destinationName="eia-api-order-simulation-x/ConsumerGroups/eia-api-order-simulation-consumer-x/Partitions/0" numberOfConsumers="1"/>
+		<logger level="INFO" doc:name="Logger" doc:id="06c0d422-6f0c-4001-81d6-28e97e3479d9" message=":::::::::::::: Consumed -- #[payload.Id]" category="consome"/>
+	</flow>
+	<flow name="order-simulation-callback-flow" doc:id="a481dd21-c9b3-431f-a974-3e474f1f208d" >
+		<kafka:message-listener doc:name="Listen response from Kafka response topic" doc:id="10f8f381-7c91-43eb-a1e4-3c13422f8261" config-ref="Apache_Kafka_Consumer_configuration" ackMode="IMMEDIATE"/>
+		<set-payload value="#[payload]" doc:name="De Serialize Payload" doc:id="f904ee1c-dd94-4c03-9672-d15e2156da1a" mimeType="application/json"/>
+		<ee:transform doc:name="set-trasaction-id" doc:id="3fd2af30-c6e3-40d5-a727-ed7ff52ab392">
+            <ee:message />
+            <ee:variables>
+                <ee:set-variable variableName="transactionId"><![CDATA[%dw 2.0
+output application/java
+---
+if ((not isEmpty(payload)) and (not isEmpty(payload.salesOrderResponse.order.sourceSystemOrderNumber))) payload.salesOrderResponse.order.sourceSystemOrderNumber else correlationId  ]]></ee:set-variable>
+                </ee:variables>
+        </ee:transform>
+		<ecolab-el-connector:entry-log doc:name="Entry Log for the request" doc:id="a8b5a670-8d69-4e55-9070-31a2abea4824" category="ecolab.sales.order.simulation.callback.entrylog" level="DEBUG" />
+		<ee:transform doc:name="Transform Message callbackUrl variable mapping" doc:id="a34cc883-3b6f-4807-b75d-7632c6187a33" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable resource="dwl/salesorder/request/connectCallBackUrl.dwl" variableName="callBackUrl" />
+				</ee:variables>
+		</ee:transform>
+		<flow-ref doc:name="Flow Reference to order-simulation-callback-impl-subflow" doc:id="96955177-7146-4bda-b2da-20dd5eba1a94" name="order-simulation-callback-impl-subflow" />
+		<ecolab-el-connector:exit-log doc:name="Exit Log for the response" doc:id="886ff741-0f92-4083-bbe9-ebea21ec038a" category="ecolab.sales.order.simulation.callback.exitlog" level="DEBUG"/>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="8677162b-8367-4bfc-abf8-de9b7ba4cfa7" type="ANY">
+				<ecolab-el-connector:error-log doc:name="Error Handler" doc:id="a3a8ef50-28ce-4d29-9f17-feb36c0bd125" errorTypes="MULE:EXPRESSION" category="ecolab.sales.order.simulation.callback.errorlog" errorMessages="#[if (error.description contains Mule::p('secure::additional.error.callback.message')) Mule::p('secure::additional.error.callback.message') else error.description]"/>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+</mule>

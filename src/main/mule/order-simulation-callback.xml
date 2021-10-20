@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:batch="http://www.mulesoft.org/schema/mule/batch" xmlns:azure-service-bus-messaging="http://www.mulesoft.org/schema/mule/azure-service-bus-messaging"
+	xmlns:kafka="http://www.mulesoft.org/schema/mule/kafka"
+	xmlns:logger="http://www.mulesoft.org/schema/mule/logger" xmlns:ecolab-el-connector="http://www.mulesoft.org/schema/mule/ecolab-el-connector" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/ecolab-el-connector http://www.mulesoft.org/schema/mule/ecolab-el-connector/current/mule-ecolab-el-connector.xsd
+http://www.mulesoft.org/schema/mule/logger http://www.mulesoft.org/schema/mule/logger/current/mule-logger.xsd
+http://www.mulesoft.org/schema/mule/kafka http://www.mulesoft.org/schema/mule/kafka/current/mule-kafka.xsd
+http://www.mulesoft.org/schema/mule/azure-service-bus-messaging http://www.mulesoft.org/schema/mule/azure-service-bus-messaging/current/mule-azure-service-bus-messaging.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd">
+	<flow name="order-simulation-consumer-flow" doc:id="3302d1bd-8f7a-4e80-a0b5-ed86179c6a55" >
+		<ee:transform doc:name="set-trasaction-id" doc:id="5895dbd8-a41e-453c-9451-31ac174979f1">
+            <ee:message />
+            <ee:variables>
+                <ee:set-variable variableName="transactionId"><![CDATA[%dw 2.0
+output application/java
+---
+if ((not isEmpty(payload)) and (not isEmpty(payload.salesOrderResponse.order.sourceSystemOrderNumber))) payload.salesOrderResponse.order.sourceSystemOrderNumber else correlationId  ]]></ee:set-variable>
+                </ee:variables>
+        </ee:transform>
+		<ecolab-el-connector:entry-log doc:name="Entry Log for the request" doc:id="6f3cdbdc-9112-4690-9390-085578f12930" category="ecolab.sales.order.simulation.callback.entrylog" level="DEBUG" />
+		<ee:transform doc:name="Transform Message callbackUrl variable mapping" doc:id="ce77f30b-cbaa-47c1-a6d7-3b94456c3b9c" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable resource="dwl/salesorder/request/connectCallBackUrl.dwl" variableName="callBackUrl" />
+				</ee:variables>
+		</ee:transform>
+		<flow-ref doc:name="Flow Reference to order-simulation-callback-impl-subflow" doc:id="42934fea-1bbf-450c-b459-166c76ce0105" name="order-simulation-callback-impl-subflow" />
+		<ecolab-el-connector:exit-log doc:name="Exit Log for the response" doc:id="ab4bdcbd-953b-4258-ab8c-abf827cf1fd5" category="ecolab.sales.order.simulation.callback.exitlog" level="DEBUG"/>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="38213a03-5b5e-4d40-90f0-52e4a3485f4a" type="ANY">
+				<ecolab-el-connector:error-log doc:name="Error Handler" doc:id="e78ff478-970a-4323-b078-2f9ce97eb9b9" errorTypes="MULE:EXPRESSION" category="ecolab.sales.order.simulation.callback.errorlog" errorMessages="#[if (error.description contains Mule::p('secure::additional.error.callback.message')) Mule::p('secure::additional.error.callback.message') else error.description]"/>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	<flow name="order-simulation-callbackFlow1" doc:id="7ff95cc8-72b1-4dac-92eb-b74e68fd9125" >
+		<batch:job jobName="order-simulation-callbackBatch_Job1" doc:id="59eb6c11-15ca-4fd7-b72f-99d171e142e4" >
+			<batch:process-records >
+				<batch:step name="Batch_Step1" doc:id="f40b5c14-d75f-4594-9e64-4ec2a3083aa5" />
+			</batch:process-records>
+		</batch:job>
+	</flow>
+	<flow name="order-simulation-callbackFlow" doc:id="4a559362-662b-4921-a097-e22b03216d5f" >
+		<choice doc:name="Choice" doc:id="5e168d0f-1738-4b2c-9325-2c4e4fd0ede7" >
+			<when >
+				<logger level="INFO" doc:name="Logger" doc:id="b2bbfa00-553d-48c7-be4f-1607a46c0287" />
+				<batch:job jobName="order-simulation-callbackBatch_Job" doc:id="a8d96358-9155-4735-a54f-d26ae0164854" >
+			<batch:process-records >
+				<batch:step name="Batch_Step" doc:id="53d069fc-2480-4629-8971-803786d39e9c" />
+			</batch:process-records>
+		</batch:job>
+			</when>
+		</choice>
+		
+	</flow>
+	<sub-flow name="order-simulation-callbackSub_Flow" doc:id="dee7bd95-4e0b-44c7-a218-b6b156811671" >
+		<ee:transform doc:name="Transform Message" doc:id="c5101e94-4d16-451d-9de9-a4171b6e476f" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</sub-flow>
+</mule>
