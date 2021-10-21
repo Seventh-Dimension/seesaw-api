@@ -53,8 +53,8 @@ if ((not isEmpty(payload)) and (not isEmpty(payload.salesOrderResponse.order.sou
 				</ee:variables>
 		</ee:transform>
 		<flow-ref doc:name="Flow Reference to order-simulation-callback-impl-subflow" doc:id="96955177-7146-4bda-b2da-20dd5eba1a94" name="order-simulation-callback-impl-subflow" />
-		<ecolab-el-connector:exit-log doc:name="Exit Log for the response" doc:id="886ff741-0f92-4083-bbe9-ebea21ec038a" category="ecolab.sales.order.simulation.callback.exitlog" level="DEBUG"/>
-		<error-handler >
+		<!--<ecolab-el-connector:exit-log doc:name="Exit Log for the response" doc:id="886ff741-0f92-4083-bbe9-ebea21ec038a" category="ecolab.sales.order.simulation.callback.exitlog" level="DEBUG"/>
+		<error-handler >-->
 			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="8677162b-8367-4bfc-abf8-de9b7ba4cfa7" type="ANY">
 				<ecolab-el-connector:error-log doc:name="Error Handler" doc:id="a3a8ef50-28ce-4d29-9f17-feb36c0bd125" errorTypes="MULE:EXPRESSION" category="ecolab.sales.order.simulation.callback.errorlog" errorMessages="#[if (error.description contains Mule::p('secure::additional.error.callback.message')) Mule::p('secure::additional.error.callback.message') else error.description]"/>
 			</on-error-propagate>
